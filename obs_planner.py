@@ -151,16 +151,18 @@ for t in time:
         sources[k].compute(meerkat)
         src_coord = np.asarray([sources[k].az, sources[k].alt],
                                dtype=np.float64)
-        dot_src_sun = np.arccos(np.dot(sun_coord, src_coord) /
-                                np.sqrt(np.sum(sun_coord**2)) /
-                                np.sqrt(np.sum(src_coord**2)))
-        dot_src_moon = np.arccos(np.dot(moon_coord, src_coord) /
-                                 np.sqrt(np.sum(moon_coord**2)) /
-                                 np.sqrt(np.sum(src_coord**2)))
+        def angle_between(theta_1, phi_1, theta_2, phi_2):
+            return np.arccos(np.sin(theta_1) * np.sin(theta_2) + 
+                             np.cos(theta_1) * np.cos(theta_2) * np.cos(phi_1 - phi_2))
+
+        dot_src_sun = angle_between(sun_coord[0], sun_coord[1], 
+                                    src_coord[0], src_coord[1]) + (10000 * (sources["Sun"].alt < 0.0))
+        dot_src_moon = angle_between(moon_coord[0], moon_coord[1],
+                                     src_coord[0], src_coord[1]) + (10000 * (sources["Moon"].alt < 0.0))
 
         if sources[k].alt > np.deg2rad(args.elev_cutoff) and \
-           dot_src_sun > np.deg2rad(args.solar_separation) and \
-           dot_src_moon > np.deg2rad(args.lunar_separation):
+           ((dot_src_sun > np.deg2rad(args.solar_separation) and \
+             dot_src_moon > np.deg2rad(args.lunar_separation)) or k in ["Sun", "Moon"]):
             positions[k].append([float(sources[k].az),
                                  float(np.pi * 0.5 - sources[k].alt)])
             pa[k].append(sources[k].parallactic_angle())
@@ -168,15 +170,15 @@ for t in time:
             sidereals[k].append(meerkat.sidereal_time())
 
         else:
-            if dot_src_sun <= np.deg2rad(args.solar_separation) and k in args.sources and sources[k].alt > np.deg2rad(args.elev_cutoff):
+            if dot_src_sun <= np.deg2rad(args.solar_separation) and k in args.sources and not k == "Sun" and sources[k].alt > np.deg2rad(args.elev_cutoff):
                 print "WARNING: {0:s} experiences solar interference at {1:s}".format(k, str(ephem.Date(t).datetime()))
                 times_interference[k].append(t)
                 pa_interference[k].append(sources[k].parallactic_angle())
                 positions_interference[k].append([float(sources[k].az),
                                                   float(np.pi * 0.5 - sources[k].alt)])
 
-            if dot_src_moon <= np.deg2rad(args.lunar_separation) and k in args.sources and sources[k].alt > np.deg2rad(args.elev_cutoff):
-                print "WARNING: {0:s} is behind the moon lunar at {1:s}".format(k, str(ephem.Date(t).datetime()))
+            if dot_src_moon <= np.deg2rad(args.lunar_separation) and k in args.sources and not k == "Moon" and sources[k].alt > np.deg2rad(args.elev_cutoff):
+                print "WARNING: {0:s} is behind the moon at {1:s}".format(k, str(ephem.Date(t).datetime()))
                 times_interference[k].append(t)
                 pa_interference[k].append(sources[k].parallactic_angle())
                 positions_interference[k].append([float(sources[k].az),
@@ -243,10 +245,11 @@ for si, s in enumerate(args.sources):
             np.sin(np.deg2rad(positions[s][:,1]))*np.sin(np.deg2rad(positions[s][:,0])),
             np.cos(np.deg2rad(positions[s][:,1])), args.plot_styles[si],
             label=s, markersize=args.marker_size, markevery=25)
-    ax.plot(np.sin(np.deg2rad(positions_interference[s][:,1]))*np.cos(np.deg2rad(positions_interference[s][:,0])),
-            np.sin(np.deg2rad(positions_interference[s][:,1]))*np.sin(np.deg2rad(positions_interference[s][:,0])),
-            np.cos(np.deg2rad(positions_interference[s][:,1])), "r.",
-            markersize=args.marker_size/6.0)
+    if len(positions_interference[s]) > 0:
+         ax.plot(np.sin(np.deg2rad(positions_interference[s][:,1]))*np.cos(np.deg2rad(positions_interference[s][:,0])),
+                 np.sin(np.deg2rad(positions_interference[s][:,1]))*np.sin(np.deg2rad(positions_interference[s][:,0])),
+                 np.cos(np.deg2rad(positions_interference[s][:,1])), "r.",
+                 markersize=args.marker_size/6.0)
 
 ax.legend()
 ax.grid(False)
@@ -268,8 +271,9 @@ for si, s in enumerate(args.sources):
             markersize = args.marker_size, markevery=25)
     time = [ephem.Date(t).datetime() if not np.isnan(t) else datetime.datetime.now() for t in
             times_interference[s]]
-    ax.plot(time, 90 - positions_interference[s][:,1], "r.",
-            markersize = args.marker_size/6.0)
+    if len(positions_interference[s] > 0):
+        ax.plot(time, 90 - positions_interference[s][:,1], "r.",
+                markersize = args.marker_size/6.0)
 hfmt = mdates.DateFormatter('%H:%M')
 
 ax.xaxis.set_major_formatter(hfmt)
@@ -287,7 +291,8 @@ for si, s in enumerate(args.sources):
             markersize=args.marker_size, markevery=25)
     time = [ephem.Date(t).datetime() if not np.isnan(t) else datetime.datetime.now() for t in
             times_interference[s]]
-    ax.plot(time, pa_interference[s][:], "r.", markersize=args.marker_size/6.0)
+    if len(pa_interference[s][:]) > 0:
+        ax.plot(time, pa_interference[s][:], "r.", markersize=args.marker_size/6.0)
 
 hfmt = mdates.DateFormatter('%H:%M')
 
