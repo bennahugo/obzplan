@@ -32,7 +32,7 @@ setup(name='obzplan',
       install_requires=requirements,
       include_package_data=True,
       packages=["obzplan"],
-      scripts=["obzplan/obzplan.py"],
+      scripts=["obzplan/obzplan"],
 )
 
 

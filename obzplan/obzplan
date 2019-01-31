@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import obzplan
 import ephem
 import sys
 import os
@@ -35,7 +35,7 @@ parser.add_argument("-e",
                     help="Observation end time local")
 parser.add_argument("--elev-cutoff",
                     type=float,
-                    default=-90,
+                    default=15,
                     help="Elevation cutoff")
 parser.add_argument("sources", metavar="src", type=str, nargs="+",
                     help="Sources to plot")
@@ -61,7 +61,7 @@ parser.add_argument("--marker-size",
                     help="Marker size")
 parser.add_argument("--satelite-separation",
                     type=float,
-                    default=7.0,
+                    default=1.0,
                     help="Minimum satelite separation")
 
 args = parser.parse_args()
@@ -79,7 +79,8 @@ scp = ephem.readdb("SCP,f|J,00:00:00.00000,-90:00:00:00000,0.0")
 sources = {"Sun": ephem.Sun(),
            "Moon": ephem.Moon(),
           }
-with open(os.path.join(os.path.dirname(__file__), "data", "catalog.txt")) as f:
+
+with open(os.path.join(os.path.dirname(obzplan.__file__), "data", "catalog.txt")) as f:
     for line in f:
         name, catline = line.split(":custom")
         sources[name] = ephem.readdb(name + catline)
@@ -87,7 +88,7 @@ with open(os.path.join(os.path.dirname(__file__), "data", "catalog.txt")) as f:
 
 satelites = {}
 
-with open(os.path.join(os.path.dirname(__file__), "data", "sat_tles.txt")) as f:
+with open(os.path.join(os.path.dirname(obzplan.__file__), "data", "sat_tles.txt")) as f:
         i = 0
         name = l1 = l2 = ""
         for line in f:
@@ -146,7 +147,8 @@ for t in time:
         except ValueError as e:
             print e
             continue
-
+        if sources[k].alt <= np.deg2rad(args.elev_cutoff):
+            continue
         src_coord = np.asarray([sources[k].az, sources[k].alt],
                                dtype=np.float64)
         def angle_between(theta_1, phi_1, theta_2, phi_2):
