@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import ephem
+import sys
+import os
 import numpy as np
 from matplotlib import pyplot as plt
 import argparse
@@ -57,6 +59,10 @@ parser.add_argument("--marker-size",
                     type=float,
                     default="6.0",
                     help="Marker size")
+parser.add_argument("--satelite-separation",
+                    type=float,
+                    default=7.0,
+                    help="Minimum satelite separation")
 
 args = parser.parse_args()
 if len(args.plot_styles) < len(args.sources):
@@ -72,42 +78,30 @@ scp = ephem.readdb("SCP,f|J,00:00:00.00000,-90:00:00:00000,0.0")
 
 sources = {"Sun": ephem.Sun(),
            "Moon": ephem.Moon(),
-           "DEEP2": ephem.readdb("DEEP_2,f|J,04:13:26.40,-80.00.00.00000,0.0"),
-           "0252-712": ephem.readdb("0252-712,f|J,02:52:46.15,-71.04.35.30,0.0"),
-           "0408-65": ephem.readdb("0408-65,f|J,04:08:20:38,-65.45.09.10,0.0"),
-           "PKS 0407-65": ephem.readdb("0408-65,f|J,04:08:20:38,-65.45.09.10,0.0"),
-           "PKS 1934-638":
-           ephem.readdb("custom,f|J,19:39:25:00,-63.42.46.00,0.0"),
-           "PKS 1934-638": ephem.readdb("custom,f|J,19:39:25:00,-63.42.46.00,0.0"),
-           "3C286": ephem.readdb("custom,f|J,13:31:08.3,30:30:33,0.0"),
-           "3C138": ephem.readdb("custom,f|J,05:21:09,16:38:22,0.0"),
-           "PKS 1422-29": ephem.readdb("custom,f|J,14:25:30:00,-30.00.00.00,0.0"),
-           "alleged ghost": ephem.readdb("custom,f|J,14:25:30:00,30.00.00.00,0.0"),
-           "1244-255": ephem.readdb("custom,f|J,12:46:46:80,-25:47:49:3,0.0"),
-           "1334-127": ephem.readdb("custom,f|J,13:37:39:78,-12:57:24:7,0.0"),
-           "NGC4993_off": ephem.readdb("custom,f|J,13:09:21:00,-23:31:24:0,0.0"),
-           "3C283": ephem.readdb("custom,f|J,13:11:40:10,-22:17:04:0,0.0"),
-           "A781": ephem.readdb("custom,f|J,09:20:25:00,+30:30:11:0,0.0"),
-           "RXCJ 1638.2-6420":ephem.readdb("custom,f|J,16:38:18:00,-64:21:07:0,0.0"),
-           "RXCJ 1631.6-7507":ephem.readdb("custom,f|J,16:31:24:00,-75:07:01:0,0.0"),
-           "PSZ1G 018.75+23.5":ephem.readdb("custom,f|J,17:02:22:00,-01:00:16:0,0.0"),
-           "A1300":ephem.readdb("custom,f|J,11:31:54,-19:55:42,0.0"),
-           "1854-663":ephem.readdb("custom,f|J,18:59:57:00,-66:15:03:0,0.0"),
-           "1607-841":ephem.readdb("custom,f|J,16:19:33:00,-84:18:19:0,0.0"),
-           "1722-554":ephem.readdb("custom,f|J,17:26:49:00,-55:29:38:0,0.0"),
-           "2210-016":ephem.readdb("custom,f|J,22:12:38,+01:37:05:0,0.0"),
-           "1548+056":ephem.readdb("custom,f|J,15:50:35,+05:27:11:0,0.0"),
-           "CTD93":ephem.readdb("custom,f|J,16:09:13:00,+26:41:29:0,0.0"),
-           "1139-285":ephem.readdb("custom,f|J,11:41:35,-28:50:52:00,0.0"),
-           "MACSJ 1931-2635":ephem.readdb("custom,f|J,19:31:49,-26:34:34,0.0"),
-           "1948-277":ephem.readdb("custom,f|J,19:51:23:00,-27:37:20:00,0.0"),
-           "1936-155":ephem.readdb("custom,f|J,19:39:26.657740,-15:25:43.058320,0.0"),
-           "0408+085":ephem.readdb("custom,f|J,04:11:33.8575,+08:48:11.408,0.0"),
-           "0000+177":ephem.readdb("custom,f|J,00:03:21.10,-17:27:11.78,0.0"),
-           "PSZ2G277.76-51.74":ephem.readdb("custom,f|J,02:54:17.5,-58:57:10.8,0.0"),
-           "PSZ2G254.08-58.45":ephem.readdb("custom,f|J,03:04:16.8,-44:01:51.6,0.0"),
-           "PSZ2G255.60-46.18":ephem.readdb("custom,f|J,04:11:15.5,-48:19:19.2,0.0")
           }
+with open(os.path.join(os.path.dirname(__file__), "data", "catalog.txt")) as f:
+    for line in f:
+        name, catline = line.split(":custom")
+        sources[name] = ephem.readdb(name + catline)
+        print "Adding source {0:s}".format(name)
+
+satelites = {}
+
+with open(os.path.join(os.path.dirname(__file__), "data", "sat_tles.txt")) as f:
+        i = 0
+        name = l1 = l2 = ""
+        for line in f:
+            if i % 3 == 0:
+                name = line.strip()
+            elif i % 3 == 1:
+                l1 = line
+            else:
+                l2 = line
+                sources[name] = ephem.readtle(name, l1, l2)
+                satelites[name] = ephem.readtle(name, l1, l2)
+                print "Adding satelite {0:s} to RFI sources".format(name)
+            i += 1
+
 positions = {k: [] for k in sources}
 pa = {k: [] for k in sources}
 
@@ -140,15 +134,19 @@ sidereals = {k: [] for k in sources}
 
 for t in time:
     meerkat.date = t
-    for k in sources:
+    for k in args.sources:
         sources["Sun"].compute(meerkat)
         sun_coord = np.asarray([sources["Sun"].az, sources["Sun"].alt],
                                dtype=np.float64)
         sources["Moon"].compute(meerkat)
         moon_coord = np.asarray([sources["Moon"].az, sources["Moon"].alt],
                                dtype=np.float64)
+        try:
+            sources[k].compute(meerkat)
+        except ValueError as e:
+            print e
+            continue
 
-        sources[k].compute(meerkat)
         src_coord = np.asarray([sources[k].az, sources[k].alt],
                                dtype=np.float64)
         def angle_between(theta_1, phi_1, theta_2, phi_2):
@@ -160,9 +158,27 @@ for t in time:
         dot_src_moon = angle_between(moon_coord[0], moon_coord[1],
                                      src_coord[0], src_coord[1]) + (10000 * (sources["Moon"].alt < 0.0))
 
+        min_sat_separation = 10000
+        sat_name = ""
+        for sat in satelites:
+            try:
+                satelites[sat].compute(meerkat)
+                dot_sat_src =  angle_between(src_coord[0], src_coord[1],
+                                             satelites[sat].az, satelites[sat].alt)
+                if min_sat_separation > dot_sat_src:
+                    min_sat_separation = dot_sat_src
+                    sat_name = sat
+
+            except ValueError as e:
+                continue
+            except RuntimeError as e:
+                continue
+                                   
+
         if sources[k].alt > np.deg2rad(args.elev_cutoff) and \
-           ((dot_src_sun > np.deg2rad(args.solar_separation) and \
-             dot_src_moon > np.deg2rad(args.lunar_separation)) or k in ["Sun", "Moon"]):
+           ((min_sat_separation > np.deg2rad(args.satelite_separation) and \
+             dot_src_sun > np.deg2rad(args.solar_separation) and \
+             dot_src_moon > np.deg2rad(args.lunar_separation)) or (k in ["Sun", "Moon"]) or k in satelites):
             positions[k].append([float(sources[k].az),
                                  float(np.pi * 0.5 - sources[k].alt)])
             pa[k].append(sources[k].parallactic_angle())
@@ -183,7 +199,17 @@ for t in time:
                 pa_interference[k].append(sources[k].parallactic_angle())
                 positions_interference[k].append([float(sources[k].az),
                                                   float(np.pi * 0.5 - sources[k].alt)])
-
+            if min_sat_separation <= np.deg2rad(args.satelite_separation) and \
+                    k in args.sources and \
+                    not k in ["Sun", "Moon"] and \
+                    not k in satelites and \
+                    sources[k].alt > np.deg2rad(args.elev_cutoff):
+                print "WARNING: {0:s} (elevation {1:f}) is within {2:f} degrees from satelite '{3:s}' at {4:s}".format(k, 
+                    np.rad2deg(sources[k].alt), np.rad2deg(min_sat_separation), sat_name, str(ephem.Date(t).datetime()))
+                times_interference[k].append(t)
+                pa_interference[k].append(sources[k].parallactic_angle())
+                positions_interference[k].append([float(sources[k].az),
+                                                  float(np.pi * 0.5 - sources[k].alt)])
 
             times_above[k].append(np.nan)
             positions[k].append([np.nan, np.nan])
