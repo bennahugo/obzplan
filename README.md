@@ -3,7 +3,7 @@ Simple tool for visualizing observations
 
 (C) Benjamin Hugo, South African Radio Astronomy Observatory under GNU GPLv3
 
-# install
+### Install
 In a new virtual environment run to install from PyPI
 ```
 pip3 install obzplan
@@ -14,7 +14,7 @@ Note: you probably need to install tkinter for python3 if you haven't done so ye
 ```
 apt-get install python3-tk
 ```
-# Usage
+### Usage
 ```
 positional arguments:
   src                   Sources to plot
