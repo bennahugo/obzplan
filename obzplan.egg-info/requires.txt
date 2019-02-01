@@ -1,0 +1,5 @@
+matplotlib>=2.2.3
+astropy>=2.0.7
+numpy>=1.15.1
+scipy>=1.1.0
+pyephem>=3.7.6.0

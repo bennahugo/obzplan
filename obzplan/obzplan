@@ -1,4 +1,21 @@
 #!/usr/bin/env python
+"""
+    Obzplan - an observation planning tool for MeerKAT
+    Copyright (C) 2018-2019  Benjamin Hugo, South African Radio Astronomy Observatory
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""
 import obzplan
 import ephem
 import sys
@@ -9,8 +26,34 @@ import argparse
 from mpl_toolkits.mplot3d import Axes3D
 import datetime
 import matplotlib.dates as mdates
+import logging
 
-parser = argparse.ArgumentParser(description="Observation Planner")
+def create_logger():
+    """ Create a console logger """
+    log = logging.getLogger(obzplan.__name__)
+    cfmt = logging.Formatter(('%(name)s - %(asctime)s %(levelname)s - %(message)s'))
+    log.setLevel(logging.DEBUG)
+    log.setLevel(logging.INFO)
+
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(cfmt)
+
+    log.addHandler(console)
+
+    return log, console, cfmt
+
+def remove_log_handler(hndl):
+    log.removeHandler(hndl)
+
+def add_log_handler(hndl):
+    log.addHandler(hndl)
+
+# Create the log object
+log, log_console_handler, log_formatter = create_logger()
+
+
+parser = argparse.ArgumentParser(description="Observation Planner (v {0:s})".format(obzplan.__version__))
 parser.add_argument("--lat",
                     type=str,
                     default="-30:42:47.41",
@@ -39,6 +82,8 @@ parser.add_argument("--elev-cutoff",
                     help="Elevation cutoff")
 parser.add_argument("sources", metavar="src", type=str, nargs="+",
                     help="Sources to plot")
+parser.add_argument("--add-to-catalog", type=str, nargs="+",
+                    help="Add source to catalog (format e.g. name,f|J,00:00:00.00000,-90:00:00:00000,0.0)")
 parser.add_argument("--solar-separation",
                     type=float,
                     default=15,
@@ -71,7 +116,7 @@ meerkat = ephem.Observer()
 
 # Set the observer at the Karoo
 meerkat.lat, meerkat.long, meerkat.elevation = args.lat, args.long, args.elev
-print "Observer at (lat, long, alt): (%s, %s, %s)" % (meerkat.lat, meerkat.long, meerkat.elevation)
+log.info("Observer at (lat, long, alt): (%s, %s, %s)" % (meerkat.lat, meerkat.long, meerkat.elevation))
 meerkat.epoch = ephem.J2000
  
 scp = ephem.readdb("SCP,f|J,00:00:00.00000,-90:00:00:00000,0.0")
@@ -82,9 +127,20 @@ sources = {"Sun": ephem.Sun(),
 
 with open(os.path.join(os.path.dirname(obzplan.__file__), "data", "catalog.txt")) as f:
     for line in f:
-        name, catline = line.split(":custom")
-        sources[name] = ephem.readdb(name + catline)
-        print "Adding source {0:s}".format(name)
+        try:
+            name, catline = line.split(":custom")
+            sources[name] = ephem.readdb(name + catline)
+            log.info("Adding source {0:s}".format(name))
+        except:
+            raise ValueError("Malformed database catalog string {0:s}. Check database file.".format(line))
+if args.add_to_catalog is not None:
+    for src in args.add_to_catalog:
+        try:
+            name = src.split(",")[0]
+            sources[name] = ephem.readdb(src)
+            log.info("Adding source {0:s}".format(name))
+        except:
+            raise ValueError("Malformed user input catalog string {0:s}".format(src))
 
 satelites = {}
 
@@ -100,7 +156,7 @@ with open(os.path.join(os.path.dirname(obzplan.__file__), "data", "sat_tles.txt"
                 l2 = line
                 sources[name] = ephem.readtle(name, l1, l2)
                 satelites[name] = ephem.readtle(name, l1, l2)
-                print "Adding satelite {0:s} to RFI sources".format(name)
+                log.info("Adding satelite {0:s} to RFI sources".format(name))
             i += 1
 
 positions = {k: [] for k in sources}
@@ -115,15 +171,15 @@ h2r = pi/12.0
 
 meerkat.date = args.start
 st = meerkat.date
-print "Observation start: UTC %s (LST %s = %f)" % (meerkat.date,
-                                                   meerkat.sidereal_time(),
-                                                   meerkat.sidereal_time()*r2h)
+log.info("Observation start: UTC %s (LST %s = %f)" % (meerkat.date,
+                                                      meerkat.sidereal_time(),
+                                                      meerkat.sidereal_time()*r2h))
 scp.compute(meerkat)
 meerkat.date = args.end
 et = meerkat.date
-print "Observation end: UTC %s (LST %s = %f)" % (meerkat.date,
-                                                 meerkat.sidereal_time(),
-                                                 meerkat.sidereal_time()*r2h)
+log.info("Observation end: UTC %s (LST %s = %f)" % (meerkat.date,
+                                                    meerkat.sidereal_time(),
+                                                     meerkat.sidereal_time()*r2h))
 
 scppos = (scp.az, np.pi/2 - scp.alt)
 time = np.linspace(st,et,1500)
@@ -145,10 +201,8 @@ for t in time:
         try:
             sources[k].compute(meerkat)
         except ValueError as e:
-            print e
             continue
-        if sources[k].alt <= np.deg2rad(args.elev_cutoff):
-            continue
+        
         src_coord = np.asarray([sources[k].az, sources[k].alt],
                                dtype=np.float64)
         def angle_between(theta_1, phi_1, theta_2, phi_2):
@@ -189,14 +243,14 @@ for t in time:
 
         else:
             if dot_src_sun <= np.deg2rad(args.solar_separation) and k in args.sources and not k == "Sun" and sources[k].alt > np.deg2rad(args.elev_cutoff):
-                print "WARNING: {0:s} experiences solar interference at {1:s}".format(k, str(ephem.Date(t).datetime()))
+                log.warn("{0:s} experiences solar interference at {1:s}".format(k, str(ephem.Date(t).datetime())))
                 times_interference[k].append(t)
                 pa_interference[k].append(sources[k].parallactic_angle())
                 positions_interference[k].append([float(sources[k].az),
                                                   float(np.pi * 0.5 - sources[k].alt)])
 
             if dot_src_moon <= np.deg2rad(args.lunar_separation) and k in args.sources and not k == "Moon" and sources[k].alt > np.deg2rad(args.elev_cutoff):
-                print "WARNING: {0:s} is behind the moon at {1:s}".format(k, str(ephem.Date(t).datetime()))
+                log.warn("{0:s} is behind the moon at {1:s}".format(k, str(ephem.Date(t).datetime())))
                 times_interference[k].append(t)
                 pa_interference[k].append(sources[k].parallactic_angle())
                 positions_interference[k].append([float(sources[k].az),
@@ -206,8 +260,8 @@ for t in time:
                     not k in ["Sun", "Moon"] and \
                     not k in satelites and \
                     sources[k].alt > np.deg2rad(args.elev_cutoff):
-                print "WARNING: {0:s} (elevation {1:f}) is within {2:f} degrees from satelite '{3:s}' at {4:s}".format(k, 
-                    np.rad2deg(sources[k].alt), np.rad2deg(min_sat_separation), sat_name, str(ephem.Date(t).datetime()))
+                log.warn("{0:s} (elevation {1:f}) is within {2:f} degrees from satelite '{3:s}' at {4:s}".format(k, 
+                    np.rad2deg(sources[k].alt), np.rad2deg(min_sat_separation), sat_name, str(ephem.Date(t).datetime())))
                 times_interference[k].append(t)
                 pa_interference[k].append(sources[k].parallactic_angle())
                 positions_interference[k].append([float(sources[k].az),
@@ -240,23 +294,23 @@ for si, s in enumerate(args.sources):
     az_e = positions[s][-1,0]
 
     if len(np.where(np.logical_not(np.isnan(positions[s][:,0])))[0]) == 0:
-        print "{0:s} is never above elevation limit!".format(s)
+        log.info("{0:s} is never above elevation limit!".format(s))
         continue
     else:
-        print "%s: Starting (elevation, azimuth): (%f,%f)" % (s, elv_s, az_s)
-        print "%s: Ending (elevation, azimuth): (%f,%f)" % (s, elv_e, az_e)
-        print "%s: Minimum (elevation, azimuth): (%f, %f)" % (s,
+        log.info("%s: Starting (elevation, azimuth): (%f,%f)" % (s, elv_s, az_s))
+        log.info("%s: Ending (elevation, azimuth): (%f,%f)" % (s, elv_e, az_e))
+        log.info("%s: Minimum (elevation, azimuth): (%f, %f)" % (s,
                                                               90 - np.nanmax(positions[s][:,1]),
-                                                              np.nanmin(positions[s][:,0]))
-        print "%s: Maximum (elevation, azimuth): (%f, %f)" % (s,
+                                                              np.nanmin(positions[s][:,0])))
+        log.info("%s: Maximum (elevation, azimuth): (%f, %f)" % (s,
                                                               90 - np.nanmin(positions[s][:,1]),
-                                                              np.nanmax(positions[s][:,0]))
+                                                              np.nanmax(positions[s][:,0])))
         lst_start = np.nanmin(sidereals[s])
         lst_end = np.nanmax(sidereals[s])
-        print "Observable times LST %02.0f:%02.0f to %02.0f:%02.0f" % (np.floor(lst_start),
+        log.info("Observable times LST %02.0f:%02.0f to %02.0f:%02.0f" % (np.floor(lst_start),
                                                  np.floor((lst_start - np.floor(lst_start))*60),
                                                  np.floor(lst_end),
-                                                 np.floor((lst_end - np.floor(lst_end))*60))
+                                                 np.floor((lst_end - np.floor(lst_end))*60)))
 
 
 

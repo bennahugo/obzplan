@@ -1,0 +1,12 @@
+MANIFEST.in
+README.md
+setup.py
+obzplan/__init__.py
+obzplan/obzplan
+obzplan.egg-info/PKG-INFO
+obzplan.egg-info/SOURCES.txt
+obzplan.egg-info/dependency_links.txt
+obzplan.egg-info/requires.txt
+obzplan.egg-info/top_level.txt
+obzplan/data/catalog.txt
+obzplan/data/sat_tles.txt
