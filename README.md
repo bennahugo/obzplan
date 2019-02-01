@@ -1,5 +1,6 @@
 # obzplan
 Simple tool for visualizing observations
+
 (C) Benjamin Hugo, South African Radio Astronomy Observatory under GNU GPLv3
 
 # install
