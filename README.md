@@ -4,14 +4,17 @@ Simple tool for visualizing observations
 
 # install
 In a new virtual environment run to install from PyPI
+```
 pip3 install obzplan
-
+```
 Remember to add -e and obzplan/ if you have cloned the repo locally
 
 Note: you probably need to install tkinter for python3 if you haven't done so yet:
+```
 apt-get install python3-tk
-
+```
 # Usage
+```
 positional arguments:
   src                   Sources to plot
 
@@ -38,3 +41,4 @@ optional arguments:
                         Marker size
   --satelite-separation SATELITE_SEPARATION
                         Minimum satelite separation
+```
