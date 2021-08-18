@@ -108,6 +108,9 @@ parser.add_argument("--satelite-separation",
                     type=float,
                     default=1.0,
                     help="Minimum satelite separation")
+parser.add_argument("--no-satellites",
+                    action="store_true",
+                    help="Disable satellite separation checks")
 
 args = parser.parse_args()
 if len(args.plot_styles) < len(args.sources):
@@ -143,21 +146,21 @@ if args.add_to_catalog is not None:
             raise ValueError("Malformed user input catalog string {0:s}".format(src))
 
 satelites = {}
-
-with open(os.path.join(os.path.dirname(obzplan.__file__), "data", "sat_tles.txt")) as f:
-        i = 0
-        name = l1 = l2 = ""
-        for line in f:
-            if i % 3 == 0:
-                name = line.strip()
-            elif i % 3 == 1:
-                l1 = line
-            else:
-                l2 = line
-                sources[name] = ephem.readtle(name, l1, l2)
-                satelites[name] = ephem.readtle(name, l1, l2)
-                log.info("Adding satelite {0:s} to RFI sources".format(name))
-            i += 1
+if not args.no_satellites:
+    with open(os.path.join(os.path.dirname(obzplan.__file__), "data", "sat_tles.txt")) as f:
+            i = 0
+            name = l1 = l2 = ""
+            for line in f:
+                if i % 3 == 0:
+                    name = line.strip()
+                elif i % 3 == 1:
+                    l1 = line
+                else:
+                    l2 = line
+                    sources[name] = ephem.readtle(name, l1, l2)
+                    satelites[name] = ephem.readtle(name, l1, l2)
+                    log.info("Adding satelite {0:s} to RFI sources".format(name))
+                i += 1
 
 positions = {k: [] for k in sources}
 pa = {k: [] for k in sources}
@@ -186,6 +189,9 @@ time = np.linspace(st,et,1500)
 times_above = {k: [] for k in sources}
 times_interference = {k: [] for k in sources}
 positions_interference = {k: [] for k in sources}
+radecpositions = {k: [] for k in sources}
+radecpositions_interference = {k: [] for k in sources}
+
 pa_interference = {k: [] for k in sources}
 sidereals = {k: [] for k in sources}
 
@@ -234,13 +240,14 @@ for t in time:
         if sources[k].alt > np.deg2rad(args.elev_cutoff) and \
            ((min_sat_separation > np.deg2rad(args.satelite_separation) and \
              dot_src_sun > np.deg2rad(args.solar_separation) and \
-             dot_src_moon > np.deg2rad(args.lunar_separation)) or (k in ["Sun", "Moon"]) or k in satelites):
+             dot_src_moon > np.deg2rad(args.lunar_separation)) or (k in satelites) or (k in ["Moon", "Sun"])):
             positions[k].append([float(sources[k].az),
                                  float(np.pi * 0.5 - sources[k].alt)])
             pa[k].append(sources[k].parallactic_angle())
             times_above[k].append(t)
             sidereals[k].append(meerkat.sidereal_time())
-
+            radecpositions[k].append([float(sources[k].ra),
+                                      float(sources[k].dec)])
         else:
             if dot_src_sun <= np.deg2rad(args.solar_separation) and k in args.sources and not k == "Sun" and sources[k].alt > np.deg2rad(args.elev_cutoff):
                 log.warn("{0:s} experiences solar interference at {1:s}".format(k, str(ephem.Date(t).datetime())))
@@ -266,15 +273,21 @@ for t in time:
                 pa_interference[k].append(sources[k].parallactic_angle())
                 positions_interference[k].append([float(sources[k].az),
                                                   float(np.pi * 0.5 - sources[k].alt)])
+                radecpositions_interference[k].append([float(sources[k].ra),
+                                                       float(sources[k].dec)])
+
 
             times_above[k].append(np.nan)
             positions[k].append([np.nan, np.nan])
+            radecpositions[k].append([np.nan, np.nan])
             pa[k].append(np.nan)
             sidereals[k].append(np.nan)
 
 for k in sources:
     positions[k] = np.rad2deg(np.array(positions[k]))
     positions_interference[k] = np.rad2deg(np.array(positions_interference[k]))
+    radecpositions[k] = np.rad2deg(np.array(radecpositions[k]))
+    radecpositions_interference[k] = np.rad2deg(np.array(radecpositions_interference[k]))
 
 fig = plt.figure("Observation Planner")
 ax = fig.add_subplot(111, projection="3d")
@@ -383,4 +396,47 @@ plt.xlabel("Time (%s) UTC" % str(args.start))
 plt.ylabel("Parallactic angle")
 plt.grid(True)
 plt.legend()
-plt.show()
+
+fig = plt.figure("RA v Time")
+ax = fig.add_subplot(111)
+for si, s in enumerate(args.sources):
+    time = [ephem.Date(t).datetime() if not np.isnan(t) else datetime.datetime.now() for t in
+            times_above[s]]
+    ax.plot(time, radecpositions[s][:, 0], args.plot_styles[si], label=s,
+            markersize=args.marker_size, markevery=25)
+    time = [ephem.Date(t).datetime() if not np.isnan(t) else datetime.datetime.now() for t in
+            times_interference[s]]
+    if len(time) > 0:
+        ax.plot(time, radecpositions_interference[s][:, 0], "r.", markersize=args.marker_size/6.0)
+
+
+hfmt = mdates.DateFormatter('%H:%M')
+
+ax.xaxis.set_major_formatter(hfmt)
+plt.xlabel("Time (%s) UTC" % str(args.start))
+plt.ylabel("Right Ascension [Current Epoch]")
+plt.grid(True)
+plt.legend()
+
+fig = plt.figure("Dec v Time")
+ax = fig.add_subplot(111)
+for si, s in enumerate(args.sources):
+    time = [ephem.Date(t).datetime() if not np.isnan(t) else datetime.datetime.now() for t in
+            times_above[s]]
+    ax.plot(time, radecpositions[s][:, 1], args.plot_styles[si], label=s,
+            markersize=args.marker_size, markevery=25)
+    time = [ephem.Date(t).datetime() if not np.isnan(t) else datetime.datetime.now() for t in
+            times_interference[s]]
+    if len(time) > 0:
+        ax.plot(time, radecpositions_interference[s][:, 1], "r.", markersize=args.marker_size/6.0)
+
+
+hfmt = mdates.DateFormatter('%H:%M')
+
+ax.xaxis.set_major_formatter(hfmt)
+plt.xlabel("Time (%s) UTC" % str(args.start))
+plt.ylabel("Declination [Current Epoch]")
+plt.grid(True)
+plt.legend()
+
+plt.show(block=True)
