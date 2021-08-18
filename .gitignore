@@ -1,2 +1,3 @@
 build/
 obzplan.egg-info/
+__pycache__/
